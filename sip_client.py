@@ -32,17 +32,23 @@ def generate_tag():
     return ''.join(choices(ascii_letters + digits, k=10))
 
 
+def generate_cseq():
+    """Generate a random tag for the From/To headers."""
+    return ''.join(choices(digits, k=4))
+
+
 class SIPClient:
-    def __init__(self, uri, port="5060", me="1100", invite=False):
+    def __init__(self, uri, port="5060", me="1100"):
         self.uri = uri
         self.port = int(port)  # Port should be an integer for socket
         self.me = me
-        self.invite = invite
+
         self.socket = None
+
         self.call_id = generate_call_id()
         self.branch = generate_branch()
         self.tag = generate_tag()
-        
+
         self.local_ip = get_local_ip()  # Get the local IP address
         self.local_port = None  # Set the local port (could be dynamically assigned)
 
@@ -107,6 +113,8 @@ class SIPClient:
         )
         content_length = len(sdp_body.encode('utf-8'))
 
+        cseq = generate_cseq()
+
         sip_invite = (
             f"INVITE sip:{callee}@{self.uri} SIP/2.0\r\n"
             f"Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};rport;branch={self.branch}\r\n"
@@ -114,7 +122,7 @@ class SIPClient:
             f'To: <sip:{callee}@{self.uri}>\r\n'
             f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 1 INVITE\r\n"
+            f"CSeq: {cseq} INVITE\r\n"
             f"Contact: <sip:{self.me}@{self.local_ip}:{self.local_port};transport=tcp>\r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
@@ -130,6 +138,15 @@ class SIPClient:
         print(f"Extracted Via headers: {via_headers}")
         return via_headers
 
+    @staticmethod
+    def extract_cseq(response):
+        """Extract CSeq from response."""
+        regex = r"CSeq: (\d+)"
+        cs = findall(regex, response)[0]
+        print(f"Extracted Via headers: {cs}")
+        return cs
+
+
     async def send_ringing(self, response, caller):
         """Send 180 Ringing response."""
         route = self.extract_record_route(response)
@@ -141,6 +158,9 @@ class SIPClient:
         via_headers_str = "\r\n".join(via_headers)  # Convert list of headers into string
 
         routes_headers = "\r\n".join([f"Record-Route: <{route[i]}>" for i in range(len(route))])
+
+        cseq = self.extract_cseq(response)
+
         sip_ringing = (
             f"SIP/2.0 180 Ringing\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
@@ -148,7 +168,7 @@ class SIPClient:
             f'To: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f'From: <sip:{caller}@{self.uri}>;tag={from_tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 1 INVITE\r\n"
+            f"CSeq: {cseq} INVITE\r\n"
             f"Contact: <sip:{req_line}> \r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -213,6 +233,10 @@ class SIPClient:
 
         # Create the 200 OK message with SDP and  Via headers
         routes_headers = "\r\n".join([f"Record-Route: <{route[i]}>" for i in range(len(route))])
+
+        cseq = self.extract_cseq(response)
+
+
         sip_200_ok = (
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
@@ -220,7 +244,7 @@ class SIPClient:
             f'To: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f'From: <sip:{caller}@{self.uri}>;tag={from_tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 1 INVITE\r\n"
+            f"CSeq: {cseq} INVITE\r\n"
             f"Contact: <sip:{req_line}> \r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
@@ -236,13 +260,15 @@ class SIPClient:
 
         routes_headers = "\r\n".join([f"Route: <{route[i]}>" for i in range(len(route) - 1, -1, -1)])
 
+        cseq = self.extract_cseq(response)
+
         sip_ack = (
             f"ACK {contact} SIP/2.0\r\n"
             f"Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};rport;branch={self.branch}\r\n"
             f'To: <sip:{callee}@{self.uri}>;tag={to_tag}\r\n'
             f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 1 ACK\r\n"
+            f"CSeq: {cseq} ACK\r\n"
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -264,6 +290,8 @@ class SIPClient:
 
         routes_headers = "\r\n".join([f"Route: <{route[i]}>" for i in range(len(route) - 1, -1, -1)])
 
+        cseq = generate_cseq()
+
         """Send SIP BYE message."""
         sip_bye = (
             f"BYE {contact} SIP/2.0\r\n"
@@ -271,7 +299,7 @@ class SIPClient:
             f'To: <sip:{other}@{self.uri}>;tag={other_tag}\r\n'
             f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 2 BYE\r\n"
+            f"CSeq: {cseq} BYE\r\n"
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -293,13 +321,15 @@ class SIPClient:
             to_number = self.me
             from_number = other
 
+        cseq = self.extract_cseq(response)
+
         sip_200_ok_bye = (
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f'To: <sip:{to_number}@{self.uri}>;tag={to_tag}\r\n'
             f'From: <sip:{from_number}@{self.uri}>;tag={from_tag}\r\n'
             f"Call-ID: {self.call_id}\r\n"
-            "CSeq: 1 BYE\r\n"
+            f"CSeq: {cseq} BYE\r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: 0\r\n\r\n"
 
@@ -382,7 +412,7 @@ class SIPClient:
             return None
 
 
-async def call(client, callee=None):
+async def call(client, callee, invite_mode):
     await client.create_socket()
     await client.register()
     await asyncio.sleep(1)  # Adding sleep for server response time
@@ -390,14 +420,14 @@ async def call(client, callee=None):
     if "200 OK" not in response:
         return
 
-    if client.invite:
+    if invite_mode:
         await client.invite_call(callee)
         while True:
             response = await client.receive_message()
             if response and "200 OK" in response and "Contact" in response:
                 await client.send_ack(response, callee)
                 # await asyncio.sleep(3) # call time
-                # await self.send_bye(response, callee)
+                # await client.send_bye(response, callee)
                 print("Call is finished")
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, callee)
@@ -413,9 +443,9 @@ async def call(client, callee=None):
                 client.call_id = client.extract_call_id(response)
                 await client.send_ringing(response, caller)
                 await client.send_200ok(response, caller)
-                # # await asyncio.sleep(3) # call time
-                # await self.send_bye(response, caller)
-                # print("Call is finished")
+            if response and "ACK" in response:
+                await client.send_bye(response, caller)
+                print("Call is finished")
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, caller)
                 print("Call is finished")
@@ -430,9 +460,8 @@ if __name__ == "__main__":
 
     if INVITE_MODE:
         callee_number = input("Enter callee ID (e.g., 1200): ").strip()
-        CLIENT = SIPClient(URI, port=PORT, me=ME, invite=True)
     else:
         callee_number = None
-        CLIENT = SIPClient(URI, port=PORT, me=ME)
 
-    asyncio.run(call(CLIENT, callee_number))
+    CLIENT = SIPClient(URI, port=PORT, me=ME)
+    asyncio.run(call(CLIENT, callee_number, INVITE_MODE))
