@@ -452,14 +452,26 @@ async def call(client, callee, invite_mode):
                 break
 
 
+import sys
+
 if __name__ == "__main__":
     URI = "192.168.21.45"  # Kamailio URI
     PORT = "5060"
-    INVITE_MODE = True
-    ME = "1100"
+    # INVITE_MODE = True
+    im = sys.argv[1] 
+    if im=="True":
+        INVITE_MODE = True
+    elif im=="False":
+        INVITE_MODE = False
+    else:
+        raise ValueError
 
+    # ME = "1100"
+    ME = sys.argv[2]
+    
     if INVITE_MODE:
-        callee_number = input("Enter callee ID (e.g., 1200): ").strip()
+        # callee_number = input("Enter callee ID (e.g., 1200): ").strip()
+        callee_number = sys.argv[3]
     else:
         callee_number = None
 
