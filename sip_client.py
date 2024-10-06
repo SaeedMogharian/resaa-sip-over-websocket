@@ -63,7 +63,7 @@ class SIPClient:
         # Get local address and port
         local_ip, local_port = self.socket.getsockname()
         self.local_port = local_port
-        print(f"Connected to {self.uri}:{self.port} from local port {local_port}")
+        print(f"Connected to {self.uri}:{self.port} from local port {local_port}\n")
 
     async def send_message(self, message):
         """Send a SIP message over TCP socket."""
@@ -145,7 +145,6 @@ class SIPClient:
         cs = findall(regex, response)[0]
         print(f"Extracted Via headers: {cs}")
         return cs
-
 
     async def send_ringing(self, response, caller):
         """Send 180 Ringing response."""
@@ -235,7 +234,6 @@ class SIPClient:
         routes_headers = "\r\n".join([f"Record-Route: <{route[i]}>" for i in range(len(route))])
 
         cseq = self.extract_cseq(response)
-
 
         sip_200_ok = (
             f"SIP/2.0 200 OK\r\n"
@@ -412,7 +410,7 @@ class SIPClient:
             return None
 
 
-async def call(client, callee, invite_mode):
+async def call(client: SIPClient, callee, invite_mode, send_bye=True):
     await client.create_socket()
     await client.register()
     await asyncio.sleep(1)  # Adding sleep for server response time
@@ -426,12 +424,14 @@ async def call(client, callee, invite_mode):
             response = await client.receive_message()
             if response and "200 OK" in response and "Contact" in response:
                 await client.send_ack(response, callee)
-                # await asyncio.sleep(3) # call time
-                # await client.send_bye(response, callee)
-                print("Call is finished")
+                print("Call is Connected")
+                if send_bye:
+                    await asyncio.sleep(3)  # call time
+                    await client.send_bye(response, callee)
+                    print("Call is Finished")
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, callee)
-                print("Call is finished")
+                print("Call is Finished")
                 break
     else:
         while True:
@@ -444,36 +444,51 @@ async def call(client, callee, invite_mode):
                 await client.send_ringing(response, caller)
                 await client.send_200ok(response, caller)
             if response and "ACK" in response:
-                await client.send_bye(response, caller)
-                print("Call is finished")
+                print("Call is Connected")
+                if send_bye:
+                    await asyncio.sleep(3)  # call time
+                    await client.send_bye(response, callee)
+                    print("Call is Finished")
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, caller)
                 print("Call is finished")
                 break
 
 
-import sys
+import argparse
 
 if __name__ == "__main__":
     URI = "192.168.21.45"  # Kamailio URI
     PORT = "5060"
+
+    parser = argparse.ArgumentParser(description="Process command-line arguments.")
+
+    parser.add_argument('--username', type=str, required=False, default="1100", help='Username')
+    parser.add_argument('--send_bye', type=bool, required=False, default=True, help='Send Bye (True/False)')
+    parser.add_argument('--invite_mode', type=bool, default=False, required=False, help='Invite Mode (True/False)')
+    parser.add_argument('--callee_number', type=str, required=False, default="1200", help='Callee Number')
+
+    args = parser.parse_args()
+
+    print(f"invite_mode: {args.invite_mode}")
+    print(f"send_bye: {args.send_bye}")
+    print(f"username: {args.username}")
+    print(f"callee_number: {args.callee_number}")
+    print()
+
     # INVITE_MODE = True
-    im = sys.argv[1] 
-    if im=="True":
-        INVITE_MODE = True
-    elif im=="False":
-        INVITE_MODE = False
-    else:
-        raise ValueError
+    INVITE_MODE = args.invite_mode
 
     # ME = "1100"
-    ME = sys.argv[2]
-    
+    ME = args.username
+
     if INVITE_MODE:
         # callee_number = input("Enter callee ID (e.g., 1200): ").strip()
-        callee_number = sys.argv[3]
+        callee_number = args.callee_number
     else:
         callee_number = None
 
+    SEND_BYE = args.send_bye
+
     CLIENT = SIPClient(URI, port=PORT, me=ME)
-    asyncio.run(call(CLIENT, callee_number, INVITE_MODE))
+    asyncio.run(call(CLIENT, callee_number, INVITE_MODE, SEND_BYE))
