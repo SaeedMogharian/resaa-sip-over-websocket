@@ -391,12 +391,13 @@ class SIPClient:
     def extract_contact(response):
         """Extract the Contact header from the 200 OK response."""
         # Improved regex to handle potential variations in whitespace and ensure proper extraction of SIP URI
-        regex = r'Contact:\s*".*?"\s*<([^>]+)>'
-        contact_match = findall(regex, response)[0]
-        print("Extracted Contact: ", contact_match)  # Use search to find the first match
-        if contact_match:
+        
+        regex = r'Contact:\s*(?:"[^"]*"\s*)?<([^>]+)>'
+        match = search(regex, response)
+        print("Extracted Contact: ", match)  # Use search to find the first match
+        if match:
             # contact = contact_match.group(1)  # Extract the actual contact URI
-            contact = contact_match
+            contact = match.group(1)
             print("Extracted Contact: ", contact)
             return contact
         else:
