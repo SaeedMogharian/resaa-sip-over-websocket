@@ -1,6 +1,6 @@
 import asyncio
 import socket
-from random import choices
+from random import choices, randint
 from string import ascii_letters, digits
 from re import findall, search, DOTALL
 
@@ -34,7 +34,7 @@ def generate_tag():
 
 def generate_cseq():
     """Generate a random tag for the From/To headers."""
-    return ''.join(choices(digits, k=4))
+    return str(randint(1, 9999))
 
 
 class SIPClient:
@@ -85,6 +85,8 @@ class SIPClient:
             return None
 
     async def register(self):
+        cseq = generate_cseq()
+
         """Send SIP REGISTER message over TCP socket."""
         sip_register = (
             f'REGISTER sip:{self.uri} SIP/2.0\r\n'
@@ -93,7 +95,7 @@ class SIPClient:
             f'To: <sip:{self.me}@{self.uri}>\r\n'
             f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
             f'Call-ID: {self.call_id}\r\n'
-            'CSeq: 1 REGISTER\r\n'
+            f'CSeq: {cseq} REGISTER\r\n'
             f'Contact: <sip:{self.me}@{self.local_ip}:{self.local_port};transport=tcp;ob>\r\n'
             'Expires: 3600\r\n'
             'Content-Length: 0\r\n\r\n'
@@ -418,41 +420,46 @@ async def call(client: SIPClient, callee, invite_mode, send_bye=True):
     if "200 OK" not in response:
         return
 
+    isCall = True
     if invite_mode:
         await client.invite_call(callee)
-        while True:
+        while isCall:
             response = await client.receive_message()
             if response and "200 OK" in response and "Contact" in response:
                 await client.send_ack(response, callee)
                 print("Call is Connected")
-                if send_bye:
-                    await asyncio.sleep(3)  # call time
-                    await client.send_bye(response, callee)
-                    print("Call is Finished")
+                # if send_bye:
+                #     await asyncio.sleep(3)  # call time
+                #     await client.send_bye(response, callee)
+                #     print("Call is Finished")
+                #     isCall = False
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, callee)
                 print("Call is Finished")
-                break
+                isCall = False
     else:
-        while True:
+        r_invite = None
+        while isCall:
             response = await client.receive_message()
             caller = True
-            if response and "INVITE" in response:
+            if response and "INVITE sip:" in response:
+                r_invite = response
                 print("Received INVITE, sending RINGING and 200 OK")
                 caller = client.extract_caller(response)
                 client.call_id = client.extract_call_id(response)
                 await client.send_ringing(response, caller)
                 await client.send_200ok(response, caller)
-            if response and "ACK" in response:
+            elif response and "ACK sip:" in response:
                 print("Call is Connected")
-                if send_bye:
-                    await asyncio.sleep(3)  # call time
-                    await client.send_bye(response, callee)
-                    print("Call is Finished")
+                # if send_bye:
+                #     await asyncio.sleep(3)  # call time
+                #     await client.send_bye(r_invite, callee)
+                #     print("Call is Finished")
+                #     isCall = False
             elif response and "BYE sip:" in response:
                 await client.handle_bye(response, caller)
                 print("Call is finished")
-                break
+                isCall = False
 
 
 import argparse

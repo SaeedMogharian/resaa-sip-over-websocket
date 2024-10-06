@@ -10,4 +10,12 @@ modifing the configue file based on [Kamailio Webscoket Module](https://www.kama
 websocket sip client for testing the configue
 
 
-The client only works on the 
+
+
+
+### Issues
+- The client does not work as intended behind NAT
+- 
+
+
+
