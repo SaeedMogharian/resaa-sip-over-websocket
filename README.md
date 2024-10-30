@@ -1,46 +1,44 @@
-# SIP over WebSocket (with testing client)
+# SIP over WebSocket (Testing Client)
 
-## Kamailio WebSocket Setup
+## راه‌اندازی WebSocket در Kamailio
 
-### Calls Over WebSocket
+### تماس‌ از طریق WebSocket
 
-The SIP client can make and receive sip-calls over WebSocket, allowing for seamless communication over modern web protocols.
+کلاینت SIP می‌تواند تماس‌های SIP را از طریق WebSocket برقرار و دریافت کند که ارتباطات را از طریق این پروتکل‌ وب امکان‌پذیر می‌کند.
 
-### Configuring kamailio.cfg
+### تنظیمات فایل kamailio.cfg
 
-The Kamailio configuration file needs to be modified to enable WebSocket support based on the Kamailio [WebSocket Module documentation](https://www.kamailio.org/docs/modules/stable/modules/websocket.html).
+برای فعال کردن پشتیبانی از WebSocket در Kamailio، لازم است فایل پیکربندی Kamailio را بر اساس [مستندات ماژول WebSocket در Kamailio](https://www.kamailio.org/docs/modules/stable/modules/websocket.html) تغییر دهید.
 
-[kamailio.cfg](kamailio.cfg)
+فایل [kamailio.cfg](kamailio.cfg)
 
-- Server IP: 192.168.21.45
-- WebSocket Port (TCP): 80
-- SIP Ports (TCP/UDP): 5060 (for standard SIP connections)
+- آدرس سرور  کمیلیو:‌ در این حالت: 192.168.21.45
+- پورت WebSocket (TCP): 80
+- پورت‌های SIP (TCP/UDP): 5060 (برای اتصالات استاندارد SIP)
 
-Ensure that the Kamailio server is properly configured for WebSocket connections on the specified port.
+اطمینان حاصل کنید که سرور Kamailio برای اتصالات WebSocket روی پورت مشخص‌شده به درستی تنظیم شده باشد.
 
-## Sip Client Implementations
-- [ws_client.py](ws_client.py): WebSocket-based SIP client that can be used to test the configuration of Kamailio with WebSocket support.
-- [sip_client.py](sip_client.py): A similar SIP client that communicates using standard socket connections instead of WebSocket.
+## پیاده‌سازی‌های کلاینت SIP
+- کلاینت [ws_client.py](ws_client.py): کلاینت SIP مبتنی بر  Websocket که برای آزمایش وب‌سوکت قابل استفاده است.
+- کلاینت [sip_client.py](sip_client.py): کلاینت SIP مشابهی که از اتصالات سوکت استاندارد به جای وب‌سوکت استفاده می‌کند.
 
-## How to Use the SIP Client
+## نحوه استفاده از کلاینت SIP
+### گزینه‌های خط فرمان
 
-### Command-Line Options
+- گزینه `--username`: نام کاربری SIP برای ثبت‌نام و شروع تماس‌ها. (اختیاری، پیش‌فرض: "1100")
+- گزینه`--send_bye`: فلگ برای تعیین ارسال پیام BYE پس از تماس. (اختیاری، پیش‌فرض: "True")
+- گزینه`--invite_mode`: فلگ برای فعال کردن حالت INVITE برای برقراری تماس. (اختیاری، پیش‌فرض: "False")
+- گزینه`--callee_number`: شماره مخاطب برای پیام INVITE. (اختیاری، پیش‌فرض: None)
 
-- `--username`: SIP username to register and initiate calls. (Optional, default: "1100")
-- `--send_bye`: Flag to determine whether to send a BYE message after the call. (Optional, default: "True")
-- `--invite_mode`: Flag to enable INVITE mode for making calls. (Optional, default: "False")
-- `--callee_number`: The number of the callee for the INVITE message. (Optional, default: None)
+### مثال استفاده
 
-### Example Usage
-
-To run the WebSocket SIP client, you can use the following examples:
+برای اجرای کلاینت SIP مبتنی بر WebSocket، می‌توانید از مثال‌های زیر استفاده کنید: (در این حالت برنامه با شماره ۱۲۰۰ رجیستر می‌کند و به ۱۱۰۰ زنگ میزند)
 `python3 ws_client.py --send_bye True --username 1200 --invite_mode True --callee_number 1100`
-or simply run with default values:
+یا اجرای ساده با مقادیر پیش‌فرض:
 `python3 ws_client.py`
 
-### TODO
+### وظایف آینده
 
-- NAT Support: The current implementation has issues when operating behind a NAT. This needs to be addressed for proper communication in such environments.
-- SIP Message Structure: The SIP messages need to be restructured for better compatibility. It 
-
-This version focuses on improving readability, fixing grammar, and organizing the sections in a logical flow. Let me know if further refinements are needed!
+- پشتیبانی از NAT: در پیاده‌سازی فعلی هنگام کار در پشت NAT مشکلاتی وجود دارد که باید برای ارتباط درست در این محیط‌ها حل شود.
+- ساختار پیام SIP: پیام‌های SIP باید برای سازگاری بهتر ساختاربندی شوند.
+- کلاینت جامع: هر دو فایل `sip_client.py` و `ws_client.py` باید یکسان سازی شوند و با استفاده از یک تنظیم بتوان به هر دو حالت دسترسی داشت.
