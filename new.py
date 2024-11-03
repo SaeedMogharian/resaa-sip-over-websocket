@@ -39,6 +39,13 @@ def generate_cseq():
     return str(randint(1, 9999))
 
 # Headers
+def sip_uri(host, number=None, port=None) -> str:
+    if port is None and number is None:
+        return f"sip:{host}"
+    elif port is None:
+        return f"sip:{number}@{host}"
+    else:
+        return f"sip:{number}@{host}:{port}"
 
 def contact_header(uri, transport=None) -> str:
     return f"Contact: {uri};transport:{transport}\r\n"
@@ -51,14 +58,6 @@ def cseq_header(sequence, method) -> str:
 def call_id_header(call_id) -> str:
     return f"Call-ID: {call_id}\r\n"
 
-
-def sip_uri(host, number=None, port=None) -> str:
-    if port is None and number is None:
-        return f"sip:{host}\r\n"
-    elif port is None:
-        return f"sip:{number}@{host}\r\n"
-    else:
-        return f"sip:{number}@{host}:{port}\r\n"
 
 
 def to_header(uri, to_tag=None) -> str:
