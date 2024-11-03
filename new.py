@@ -52,7 +52,7 @@ def call_id_header(call_id) -> str:
     return f"Call-ID: {call_id}\r\n"
 
 
-def sip_uri(host, number:None, port=None) -> str:
+def sip_uri(host, number=None, port=None) -> str:
     if port is None and number is None:
         return f"sip:{host}\r\n"
     elif port is None:
