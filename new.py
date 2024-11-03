@@ -57,7 +57,7 @@ class SIPClient:
 
     async def create_socket(self):
         """Establish connection based on the connection type."""
-        if self.connection_type == "websocket":
+        if self.connection_type == "ws":
             self.websocket = await websockets.connect(f"ws://{self.uri}", subprotocols=["sip"])
         else:
             loop = asyncio.get_running_loop()
@@ -68,7 +68,7 @@ class SIPClient:
 
     async def send_message(self, message):
         """Send a SIP message based on the connection type."""
-        if self.connection_type == "websocket":
+        if self.connection_type == "ws":
             await self.websocket.send(message)
         else:
             self.socket.sendall(message.encode('utf-8'))
@@ -77,7 +77,7 @@ class SIPClient:
     async def receive_message(self):
         """Receive a SIP message based on the connection type."""
         try:
-            if self.connection_type == "websocket":
+            if self.connection_type == "ws":
                 response = await asyncio.wait_for(self.websocket.recv(), timeout=30)
                 print(f"Received:\n{response}")
             else:
@@ -172,22 +172,6 @@ class SIPClient:
             )
         await self.send_message(sip_invite)
 
-    @staticmethod
-    def extract_via_headers(response):
-        """Extract all Via headers from the INVITE response."""
-        regex = r"(Via:.*?)(?:\r\n|\n)"
-        via_headers = findall(regex, response)
-        print(f"Extracted Via headers: {via_headers}")
-        return via_headers
-
-    @staticmethod
-    def extract_cseq(response):
-        """Extract CSeq from response."""
-        regex = r"CSeq: (\d+)"
-        cs = findall(regex, response)[0]
-        print(f"Extracted Via headers: {cs}")
-        return cs
-
     async def send_ringing(self, response, caller):
         """Send 180 Ringing response."""
         route = self.extract_record_route(response)
@@ -214,47 +198,6 @@ class SIPClient:
             "Content-Length: 0\r\n\r\n"
         )
         await self.send_message(sip_ringing)
-
-    @staticmethod
-    def extract_sdp(response):
-        """Extract the SDP body from the INVITE response."""
-        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
-        sdp_match = search(sdp_regex, response, DOTALL)
-        if sdp_match:
-            sdp_body = sdp_match.group(0)
-            print(f"Extracted SDP:\n{sdp_body}")
-            return sdp_body
-        else:
-            print("No SDP found in the INVITE.")
-            return None
-
-    @staticmethod
-    def generate_sdp_response(sdp_body):
-        """Generate an SDP body for the 200 OK response, possibly modifying the received SDP."""
-        # Extract IP and media port from the SDP for dynamic SDP response (Optional: adjust parameters if needed)
-        ip_regex = r"c=IN IP4 (\d+\.\d+\.\d+\.\d+)"
-        media_port_regex = r"m=audio (\d+)"
-
-        ip_match = search(ip_regex, sdp_body)
-        media_port_match = search(media_port_regex, sdp_body)
-
-        ip_address = ip_match.group(1) if ip_match else "127.0.0.1"
-        media_port = media_port_match.group(1) if media_port_match else "49170"
-
-        # Generate the SDP response
-        sdp_response = (
-            "v=0\r\n"
-            f"o=- 13760799956958020 13760799956958021 IN IP4 {ip_address}\r\n"
-            "s=-\r\n"
-            f"c=IN IP4 {ip_address}\r\n"
-            "t=0 0\r\n"
-            f"m=audio {media_port} RTP/AVP 0\r\n"
-            "a=rtpmap:0 PCMU/8000\r\n"
-            "a=sendrecv\r\n"
-        )
-
-        print(f"Generated SDP for 200 OK:\n{sdp_response}")
-        return sdp_response
 
     async def send_200ok(self, response, caller):
         """Send 200 OK response."""
@@ -401,9 +344,65 @@ class SIPClient:
             f"CSeq: {cseq} BYE\r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: 0\r\n\r\n"
-
         )
         await self.send_message(sip_200_ok_bye)
+
+    @staticmethod
+    def extract_sdp(response):
+        """Extract the SDP body from the INVITE response."""
+        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
+        sdp_match = search(sdp_regex, response, DOTALL)
+        if sdp_match:
+            sdp_body = sdp_match.group(0)
+            print(f"Extracted SDP:\n{sdp_body}")
+            return sdp_body
+        else:
+            print("No SDP found in the INVITE.")
+            return None
+
+    @staticmethod
+    def generate_sdp_response(sdp_body):
+        """Generate an SDP body for the 200 OK response, possibly modifying the received SDP."""
+        # Extract IP and media port from the SDP for dynamic SDP response (Optional: adjust parameters if needed)
+        ip_regex = r"c=IN IP4 (\d+\.\d+\.\d+\.\d+)"
+        media_port_regex = r"m=audio (\d+)"
+
+        ip_match = search(ip_regex, sdp_body)
+        media_port_match = search(media_port_regex, sdp_body)
+
+        ip_address = ip_match.group(1) if ip_match else "127.0.0.1"
+        media_port = media_port_match.group(1) if media_port_match else "49170"
+
+        # Generate the SDP response
+        sdp_response = (
+            "v=0\r\n"
+            f"o=- 13760799956958020 13760799956958021 IN IP4 {ip_address}\r\n"
+            "s=-\r\n"
+            f"c=IN IP4 {ip_address}\r\n"
+            "t=0 0\r\n"
+            f"m=audio {media_port} RTP/AVP 0\r\n"
+            "a=rtpmap:0 PCMU/8000\r\n"
+            "a=sendrecv\r\n"
+        )
+
+        print(f"Generated SDP for 200 OK:\n{sdp_response}")
+        return sdp_response
+
+    @staticmethod
+    def extract_via_headers(response):
+        """Extract all Via headers from the INVITE response."""
+        regex = r"(Via:.*?)(?:\r\n|\n)"
+        via_headers = findall(regex, response)
+        print(f"Extracted Via headers: {via_headers}")
+        return via_headers
+
+    @staticmethod
+    def extract_cseq(response):
+        """Extract CSeq from response."""
+        regex = r"CSeq: (\d+)"
+        cs = findall(regex, response)[0]
+        print(f"Extracted Via headers: {cs}")
+        return cs
 
     @staticmethod
     def extract_request_line(response):
@@ -535,7 +534,7 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
 import argparse
 
 if __name__ == "__main__":
-    URI = "192.168.100.45"  # Kamailio URI
+    URI = "192.168.21.45"  # Kamailio URI
 
     parser = argparse.ArgumentParser(description="Process command-line arguments.")
     parser.add_argument('--username', type=str, required=False, default="1100", help='Username')
