@@ -48,7 +48,7 @@ def sip_uri(host, number=None, port=None) -> str:
         return f"sip:{number}@{host}:{port}"
 
 def contact_header(uri, transport=None) -> str:
-    return f"Contact: {uri};transport:{transport}\r\n"
+    return f"Contact: <{uri};transport:{transport}>\r\n"
 
 
 def cseq_header(sequence, method) -> str:
