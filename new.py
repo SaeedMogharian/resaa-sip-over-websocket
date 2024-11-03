@@ -130,7 +130,7 @@ class SIPClient:
 
     # Sip Header
     def get_address(self):
-        if self.local_ip is None:
+        if self.local_port is None:
             return f"{self.local_ip}"
         return f"{self.local_ip}:{self.local_port}"
 
