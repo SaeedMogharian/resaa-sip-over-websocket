@@ -141,7 +141,7 @@ class SIPClient:
 
         """Send SIP REGISTER message over TCP socket."""
         sip_register = (
-            f'{method} {sip_uri(self.uri)} SIP/2.0\r\n'
+            f'{method} {sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
             f'{via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
             f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
@@ -210,7 +210,7 @@ class SIPClient:
             f'{to_header(sip_uri(self.uri, number=self.me), self.tag)}'
             f'{call_id_header(self.call_id)}'
             f'{cseq_header(cseq, "INVITE")}'
-            f"Contact: <sip:{req_line}> \r\n"
+            f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Length: 0\r\n\r\n"
         )
         await self.send_message(sip_ringing)
@@ -244,7 +244,7 @@ class SIPClient:
             f'{to_header(sip_uri(self.uri, number=self.me), self.tag)}'
             f'{call_id_header(self.call_id)}'
             f'{cseq_header(cseq, "INVITE")}'
-            f"Contact: <sip:{req_line}> \r\n"
+            f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
             f"{sdp_response}"
@@ -261,14 +261,11 @@ class SIPClient:
 
         cseq = self.extract_cseq(response)
 
-        ct = self.connection_type
-
         sip_ack = (
             f"ACK {contact} SIP/2.0\r\n"
             f'{via_header(self.get_address(), self.branch, self.connection_type)}'
             f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
             f'{to_header(sip_uri(self.uri, number=callee), to_tag)}'
-            f'{call_id_header(self.call_id)}'
             f'{cseq_header(cseq, "ACK")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
@@ -458,20 +455,29 @@ class SIPClient:
         print(f"Extracted routes: {routes}")
         return routes
 
-    @staticmethod
-    def extract_contact(response):
+    def extract_contact(self, response):
         """Extract the Contact header from the 200 OK response."""
         # Improved regex to handle potential variations in whitespace and ensure proper extraction of SIP URI
-        regex = r'Contact:\s*(?:".*?"\s*)?<([^>]+)>'
-        contact_find = findall(regex, response)
-        print("Extracted Contact: ", contact_find)  # Use search to find the first match
-        if contact_find:
-            contact = contact_find[0]
-            print("Extracted Contact: ", contact)
-            return contact
+        
+        if self.connection_type == "ws":
+            regex = r'Contact:\s*(?:"[^"]*"\s*)?<([^>]+)>'
+            match = search(regex, response)
+            if match:
+                contact = match.group(1)
+            else:
+                print("Contact not found.")
+                return None
         else:
-            print("Contact not found.")
-            return None
+            regex = r'Contact:\s*(?:".*?"\s*)?<([^>]+)>'
+            contact_find = findall(regex, response)
+            if contact_find:
+                contact = contact_find[0]
+            else:
+                print("Contact not found.")
+                return None
+        print("Extracted Contact: ", contact)
+        return contact
+        
 
 
 
