@@ -34,7 +34,7 @@
 ### مثال استفاده
 
 برای اجرای کلاینت SIP مبتنی بر WebSocket، می‌توانید از مثال‌های زیر استفاده کنید: (در این حالت برنامه با شماره ۱۲۰۰ رجیستر می‌کند و به ۱۱۰۰ زنگ میزند)
-`python3 ws_client.py --send_bye True --username 1200 --invite_mode True --callee_number 1100`
+`python3 new.py --send_bye True --username 1200 --invite_mode True --callee_number 1001`
 یا اجرای ساده با مقادیر پیش‌فرض:
 `python3 ws_client.py`
 
