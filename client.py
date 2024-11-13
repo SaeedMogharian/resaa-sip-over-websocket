@@ -42,6 +42,44 @@ def generate_cseq():
     return str(randint(1, 9999))
 
 
+
+# Headers
+def sip_uri(host, number=None, port=None) -> str:
+    if port is None and number is None:
+        return f"sip:{host}"
+    elif port is None:
+        return f"sip:{number}@{host}"
+    else:
+        return f"sip:{number}@{host}:{port}"
+
+def contact_header(uri, transport=None) -> str:
+    return f"Contact: <{uri};transport:{transport}>\r\n"
+
+
+def cseq_header(sequence, method) -> str:
+    return f"CSeq: {sequence} {method}\r\n"
+
+
+def call_id_header(call_id) -> str:
+    return f"Call-ID: {call_id}\r\n"
+
+
+
+def to_header(uri, to_tag=None) -> str:
+    header = f"To: <{uri}>"
+    if to_tag is None:
+        return f"{header}\r\n"
+    return f"{header};tag={to_tag}\r\n"
+
+
+def from_header(uri, from_tag) -> str:
+    return f"From: <{uri}>;tag={from_tag}\r\n"
+
+
+def via_header(address, branch, protocol) -> str:
+    return f'Via: SIP/2.0/{protocol.upper()} {address};rport;branch={branch}\r\n'
+
+
 class SIPClient:
     def __init__(self, uri, port="80", me="1100"):
         self.uri = uri
@@ -52,8 +90,10 @@ class SIPClient:
         self.branch = generate_branch()
         self.tag = generate_tag()
 
+        self.connection_type = "ws"
+
         self.local_ip = get_local_ip()  # Get the local IP address
-        # self.local_port = None  # Set the local port (could be dynamically assign
+        self.local_port = None  # Set the local port (could be dynamically assign
 
     async def create_socket(self):
         """Establish WebSocket connection."""
@@ -74,19 +114,24 @@ class SIPClient:
             print("No response received within the timeout period.")
             return None
 
+    def get_address(self):
+        if self.local_port is None:
+            return f"{self.local_ip}"
+        return f"{self.local_ip}:{self.local_port}"
+
     async def register(self):
         cseq = generate_cseq()
 
         """Send SIP REGISTER message over WebSocket."""
         sip_register = (
-            f'REGISTER sip:{self.uri};transport:ws SIP/2.0\r\n'
-            f'Via: SIP/2.0/WS {self.local_ip};rport;branch={self.branch}\r\n'
+            f'REGISTER {sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
+            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
-            f'To: <sip:{self.me}@{self.uri}>\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f'Call-ID: {self.call_id}\r\n'
-            f'CSeq: {cseq} REGISTER\r\n'
-            f'Contact: <sip:{self.me}@{self.local_ip};transport=ws>\r\n'
+            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{to_header(sip_uri(self.uri, number=self.me))}'
+            f'{call_id_header(self.call_id)}'
+            f'{cseq_header(cseq, "REGISTER")}'
+            f'{contact_header(sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             'Expires: 3600\r\n'
             'Content-Length: 0\r\n\r\n'
         )
