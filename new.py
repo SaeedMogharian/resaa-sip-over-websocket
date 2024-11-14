@@ -128,7 +128,6 @@ class SIPClient:
             print("No response received within the timeout period.")
             return None
 
-    # Sip Header
     def get_address(self):
         if self.local_port is None:
             return f"{self.local_ip}"

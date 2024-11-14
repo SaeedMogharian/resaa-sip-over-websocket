@@ -81,34 +81,51 @@ def via_header(address, branch, protocol) -> str:
 
 
 class SIPClient:
-    def __init__(self, uri, port="80", me="1100"):
+    def __init__(self, uri, port="80", me="1100", connection_type="ws"):
         self.uri = uri
-        self.port = port
+        self.port = int(port)  # Port should be an integer for socket
         self.me = me
+        self.connection_type = connection_type.lower()
+
         self.websocket = None
+        self.socket = None
+
         self.call_id = generate_call_id()
         self.branch = generate_branch()
         self.tag = generate_tag()
 
-        self.connection_type = "ws"
-
         self.local_ip = get_local_ip()  # Get the local IP address
-        self.local_port = None  # Set the local port (could be dynamically assign
+        self.local_port = None  # Set the local port (could be dynamically assigned)
 
     async def create_socket(self):
-        """Establish WebSocket connection."""
-        self.websocket = await websockets.connect(f"ws://{self.uri}", subprotocols=["sip"])
+        """Establish connection based on the connection type."""
+        if self.connection_type == "ws":
+            self.websocket = await websockets.connect(f"ws://{self.uri}", subprotocols=["sip"])
+        else:
+            loop = asyncio.get_running_loop()
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            await loop.run_in_executor(None, self.socket.connect, (self.uri, self.port))
+            self.local_port = self.socket.getsockname()[1]
+            print(f"Connected to {self.uri}:{self.port} from local port {self.local_port}\n")
 
     async def send_message(self, message):
-        """Send a SIP message over WebSocket."""
-        await self.websocket.send(message)
+        """Send a SIP message based on the connection type."""
+        if self.connection_type == "ws":
+            await self.websocket.send(message)
+        else:
+            self.socket.sendall(message.encode('utf-8'))
         print(f"Sent:\n{message}")
 
     async def receive_message(self):
-        """Receive a SIP message over WebSocket."""
+        """Receive a SIP message based on the connection type."""
         try:
-            response = await asyncio.wait_for(self.websocket.recv(), timeout=30)
-            print(f"Received:\n{response}")
+            if self.connection_type == "ws":
+                response = await asyncio.wait_for(self.websocket.recv(), timeout=30)
+                print(f"Received:\n{response}")
+            else:
+                response = await asyncio.get_running_loop().run_in_executor(None, self.socket.recv, 4096)
+                response = response.decode('utf-8')
+                print(f"Received:\n{response}")
             return response
         except asyncio.TimeoutError:
             print("No response received within the timeout period.")
