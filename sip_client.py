@@ -1,85 +1,131 @@
 import asyncio
-import socket
+import websockets
 from random import choices, randint
 from string import ascii_letters, digits
 from re import findall, search, DOTALL
+import socket
+import argparse
 
 
 def get_local_ip():
-    """Get the local IP address of the machine."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    """Get the local IP address of the machine (may not be necessary for WebSocket)."""
     try:
-        # Connect to a public IP to get the appropriate interface, does not send data
-        s.connect(("8.8.8.8", 80))
+        # Create a temporary socket and connect to a public IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))  # Google's public DNS, just to get the local IP used
         local_ip = s.getsockname()[0]
+    except Exception as e:
+        print(f"Error getting local IP: {e}")
+        local_ip = "127.0.0.1"  # Default to localhost if there's an issue
     finally:
         s.close()
+
     return local_ip
-
-
-def generate_call_id():
-    """Generate a random Call-ID for the SIP session."""
-    return ''.join(choices(ascii_letters + digits, k=20))
-
 
 def generate_branch():
     """Generate a unique branch parameter for the Via header."""
     return "z9hG4bK" + ''.join(choices(ascii_letters + digits, k=10))
-
-
-def generate_tag():
-    """Generate a random tag for the From/To headers."""
-    return ''.join(choices(ascii_letters + digits, k=10))
-
 
 def generate_cseq():
     """Generate a random tag for the From/To headers."""
     return str(randint(1, 9999))
 
 
+# Headers
+class SIPHeaders:
+    @staticmethod
+    def sip_uri(host, number=None, port=None) -> str:
+        if port is None and number is None:
+            return f"sip:{host}"
+        elif port is None:
+            return f"sip:{number}@{host}"
+        else:
+            return f"sip:{number}@{host}:{port}"
+
+    @staticmethod
+    def contact_header(uri, transport=None) -> str:
+        return f"Contact: <{uri};transport:{transport}>\r\n"
+
+    @staticmethod
+    def cseq_header(sequence, method) -> str:
+        return f"CSeq: {sequence} {method}\r\n"
+
+    @staticmethod
+    def call_id_header(call_id) -> str:
+        return f"Call-ID: {call_id}\r\n"
+
+    @staticmethod
+    def to_header(uri, to_tag=None) -> str:
+        header = f"To: <{uri}>"
+        if to_tag is None:
+            return f"{header}\r\n"
+        return f"{header};tag={to_tag}\r\n"
+
+    @staticmethod
+    def from_header(uri, from_tag) -> str:
+        return f"From: <{uri}>;tag={from_tag}\r\n"
+
+    @staticmethod
+    def via_header(address, branch, protocol) -> str:
+        return f'Via: SIP/2.0/{protocol.upper()} {address};rport;branch={branch}\r\n'
+
+
 class SIPClient:
-    def __init__(self, uri, port="5060", me="1100"):
+    def __init__(self, uri, port="80", me="1100", connection_type="ws"):
         self.uri = uri
         self.port = int(port)  # Port should be an integer for socket
         self.me = me
+        self.connection_type = connection_type.lower()
 
+        self.websocket = None
         self.socket = None
 
-        self.call_id = generate_call_id()
+        self.call_id = None
         self.branch = generate_branch()
-        self.tag = generate_tag()
+        self.tag = ''.join(choices(ascii_letters + digits, k=10))
 
         self.local_ip = get_local_ip()  # Get the local IP address
         self.local_port = None  # Set the local port (could be dynamically assigned)
 
+    def get_address(self):
+        if self.local_port is None:
+            return f"{self.local_ip}"
+        return f"{self.local_ip}:{self.local_port}"
+
+    def generate_call_id(self):
+        """Generate a random Call-ID for the SIP session."""
+        self.call_id = ''.join(choices(ascii_letters + digits, k=20))
+
     async def create_socket(self):
-        """Establish TCP socket connection and display the local port."""
-        loop = asyncio.get_running_loop()
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        # Connect to the remote server
-        await loop.run_in_executor(None, self.socket.connect, (self.uri, self.port))
-
-        # Get local address and port
-        local_ip, local_port = self.socket.getsockname()
-        self.local_port = local_port
-        print(f"Connected to {self.uri}:{self.port} from local port {local_port}\n")
+        """Establish connection based on the connection type."""
+        if self.connection_type == "ws":
+            self.websocket = await websockets.connect(f"ws://{self.uri}", subprotocols=["sip"])
+        else:
+            loop = asyncio.get_running_loop()
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            await loop.run_in_executor(None, self.socket.connect, (self.uri, self.port))
+            self.local_port = self.socket.getsockname()[1]
+            print(f"Connected to {self.uri}:{self.port} from local port {self.local_port}\n")
 
     async def send_message(self, message):
-        """Send a SIP message over TCP socket."""
-        self.socket.sendall(message.encode('utf-8'))
+        """Send a SIP message based on the connection type."""
+        if self.connection_type == "ws":
+            await self.websocket.send(message)
+        else:
+            self.socket.sendall(message.encode('utf-8'))
         print(f"Sent:\n{message}")
 
     async def receive_message(self):
-        """Receive a SIP message over TCP socket."""
+        """Receive a SIP message based on the connection type."""
         try:
-            response = await asyncio.get_running_loop().run_in_executor(None, self.socket.recv, 4096)
-            if response:
-                response_decoded = response.decode('utf-8')
-                print(f"Received:\n{response_decoded}")
-                return response_decoded
+            if self.connection_type == "ws":
+                response = await asyncio.wait_for(self.websocket.recv(), timeout=30)
+                print(f"Received:\n{response}")
             else:
-                return None
+                response = await asyncio.get_running_loop().run_in_executor(None, self.socket.recv, 4096)
+                response = response.decode('utf-8')
+                print(f"Received:\n{response}")
+            return response
         except asyncio.TimeoutError:
             print("No response received within the timeout period.")
             return None
@@ -87,16 +133,16 @@ class SIPClient:
     async def register(self):
         cseq = generate_cseq()
 
-        """Send SIP REGISTER message over TCP socket."""
+        """Send SIP REGISTER message over WebSocket."""
         sip_register = (
-            f'REGISTER sip:{self.uri} SIP/2.0\r\n'
-            f'Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};rport;branch={self.branch}\r\n'
+            f'REGISTER {SIPHeaders.sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
-            f'To: <sip:{self.me}@{self.uri}>\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f'Call-ID: {self.call_id}\r\n'
-            f'CSeq: {cseq} REGISTER\r\n'
-            f'Contact: <sip:{self.me}@{self.local_ip}:{self.local_port};transport=tcp;ob>\r\n'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me))}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "REGISTER")}'
+            f'{SIPHeaders.contact_header(SIPHeaders.sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             'Expires: 3600\r\n'
             'Content-Length: 0\r\n\r\n'
         )
@@ -118,35 +164,19 @@ class SIPClient:
         cseq = generate_cseq()
 
         sip_invite = (
-            f"INVITE sip:{callee}@{self.uri} SIP/2.0\r\n"
-            f"Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};rport;branch={self.branch}\r\n"
-            "Max-Forwards: 70\r\n"
-            f'To: <sip:{callee}@{self.uri}>\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} INVITE\r\n"
-            f"Contact: <sip:{self.me}@{self.local_ip}:{self.local_port};transport=tcp>\r\n"
+            f'INVITE {SIPHeaders.sip_uri(self.uri, number=callee)} SIP/2.0\r\n'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
+            'Max-Forwards: 70\r\n'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=callee))}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
+            f'{SIPHeaders.contact_header(SIPHeaders.sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
             f"{sdp_body}"
         )
         await self.send_message(sip_invite)
-
-    @staticmethod
-    def extract_via_headers(response):
-        """Extract all Via headers from the INVITE response."""
-        regex = r"(Via:.*?)(?:\r\n|\n)"
-        via_headers = findall(regex, response)
-        print(f"Extracted Via headers: {via_headers}")
-        return via_headers
-
-    @staticmethod
-    def extract_cseq(response):
-        """Extract CSeq from response."""
-        regex = r"CSeq: (\d+)"
-        cs = findall(regex, response)[0]
-        print(f"Extracted Via headers: {cs}")
-        return cs
 
     async def send_ringing(self, response, caller):
         """Send 180 Ringing response."""
@@ -166,27 +196,14 @@ class SIPClient:
             f"SIP/2.0 180 Ringing\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f"{routes_headers}\r\n"
-            f'To: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f'From: <sip:{caller}@{self.uri}>;tag={from_tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} INVITE\r\n"
-            f"Contact: <sip:{req_line}> \r\n"
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=caller), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
+            f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Length: 0\r\n\r\n"
         )
         await self.send_message(sip_ringing)
-
-    @staticmethod
-    def extract_sdp(response):
-        """Extract the SDP body from the INVITE response."""
-        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
-        sdp_match = search(sdp_regex, response, DOTALL)
-        if sdp_match:
-            sdp_body = sdp_match.group(0)
-            print(f"Extracted SDP:\n{sdp_body}")
-            return sdp_body
-        else:
-            print("No SDP found in the INVITE.")
-            return None
 
     @staticmethod
     def generate_sdp_response(sdp_body):
@@ -232,7 +249,7 @@ class SIPClient:
         via_headers = self.extract_via_headers(response)
         via_headers_str = "\r\n".join(via_headers)  # Convert list of headers into string
 
-        # Create the 200 OK message with SDP and  Via headers
+        # Create the 200 OK message with SDP and all Via headers
         routes_headers = "\r\n".join([f"Record-Route: <{route[i]}>" for i in range(len(route))])
 
         cseq = self.extract_cseq(response)
@@ -241,11 +258,11 @@ class SIPClient:
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f"{routes_headers}\r\n"
-            f'To: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f'From: <sip:{caller}@{self.uri}>;tag={from_tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} INVITE\r\n"
-            f"Contact: <sip:{req_line}> \r\n"
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=caller), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
+            f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
             f"{sdp_response}"
@@ -264,11 +281,11 @@ class SIPClient:
 
         sip_ack = (
             f"ACK {contact} SIP/2.0\r\n"
-            f"Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};rport;branch={self.branch}\r\n"
-            f'To: <sip:{callee}@{self.uri}>;tag={to_tag}\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} ACK\r\n"
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=callee), to_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "ACK")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -296,11 +313,11 @@ class SIPClient:
         """Send SIP BYE message."""
         sip_bye = (
             f"BYE {contact} SIP/2.0\r\n"
-            f"Via: SIP/2.0/TCP {self.local_ip}:{self.local_port};branch={self.branch}\r\n"
-            f'To: <sip:{other}@{self.uri}>;tag={other_tag}\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} BYE\r\n"
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=other), other_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "BYE")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -327,15 +344,45 @@ class SIPClient:
         sip_200_ok_bye = (
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
-            f'To: <sip:{to_number}@{self.uri}>;tag={to_tag}\r\n'
-            f'From: <sip:{from_number}@{self.uri}>;tag={from_tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} BYE\r\n"
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=to_number), to_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=from_number), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "BYE")}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: 0\r\n\r\n"
 
         )
         await self.send_message(sip_200_ok_bye)
+
+    # Extract From SIP Message
+    @staticmethod
+    def extract_sdp(response):
+        """Extract the SDP body from the INVITE response."""
+        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
+        sdp_match = search(sdp_regex, response, DOTALL)
+        if sdp_match:
+            sdp_body = sdp_match.group(0)
+            print(f"Extracted SDP:\n{sdp_body}")
+            return sdp_body
+        else:
+            print("No SDP found in the INVITE.")
+            return None
+
+    @staticmethod
+    def extract_via_headers(response):
+        """Extract all Via headers from the INVITE response."""
+        regex = r"(Via:.*?)(?:\r\n|\n)"
+        via_headers = findall(regex, response)
+        print(f"Extracted Via headers: {via_headers}")
+        return via_headers
+
+    @staticmethod
+    def extract_cseq(response):
+        """Extract CSeq from response."""
+        regex = r"CSeq: (\d+)"
+        cs = findall(regex, response)[0]
+        print(f"Extracted Via headers: {cs}")
+        return cs
 
     @staticmethod
     def extract_request_line(response):
@@ -383,7 +430,7 @@ class SIPClient:
         from_tag = search(regex, response)
         if from_tag:
             from_tag = from_tag.group(1)
-            print(f"Extracted FROM tag: {from_tag}")
+            print(f"Extracted GROM tag: {from_tag}")
             return from_tag
         else:
             print("FROM tag not found.")
@@ -401,11 +448,13 @@ class SIPClient:
     def extract_contact(response):
         """Extract the Contact header from the 200 OK response."""
         # Improved regex to handle potential variations in whitespace and ensure proper extraction of SIP URI
-        regex = r'Contact:\s*(?:".*?"\s*)?<([^>]+)>'
-        contact_find = findall(regex, response)
-        print("Extracted Contact: ", contact_find)  # Use search to find the first match
-        if contact_find:
-            contact = contact_find[0]
+
+        regex = r'Contact:\s*(?:"[^"]*"\s*)?<([^>]+)>'
+        match = search(regex, response)
+        print("Extracted Contact: ", match)  # Use search to find the first match
+        if match:
+            # contact = contact_match.group(1)  # Extract the actual contact URI
+            contact = match.group(1)
             print("Extracted Contact: ", contact)
             return contact
         else:
@@ -415,6 +464,7 @@ class SIPClient:
 
 async def call(client: SIPClient, callee, invite_mode, send_bye):
     await client.create_socket()
+    client.generate_call_id()
     await client.register()
     await asyncio.sleep(1)  # Adding sleep for server response time
     response = await client.receive_message()
@@ -464,43 +514,41 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
                 print("Call is finished")
                 isCall = False
 
-import argparse
+
+
 
 if __name__ == "__main__":
-    URI = "192.168.21.45"  # Kamailio URI
-    PORT = "5060"
-    INVITE_MODE = False
-    SEND_BYE = True
+    URI = "192.168.21.45"  # Kamailio PCSCF URI
 
     parser = argparse.ArgumentParser(description="Process command-line arguments.")
-
     parser.add_argument('--username', type=str, required=False, default="1100", help='Username')
     parser.add_argument('--send_bye', type=str, required=False, default="True", help='Send Bye (True/False)')
     parser.add_argument('--invite_mode', type=str, default="False", required=False, help='Invite Mode (True/False)')
     parser.add_argument('--callee_number', type=str, required=False, default=None, help='Callee Number')
+    parser.add_argument('--connection_type', type=str, default="tcp", help="Connection type: 'tcp', 'udp' or 'ws'")
 
     args = parser.parse_args()
 
     # Convert string inputs to boolean values
-    if args.invite_mode.lower() == "true":
-        INVITE_MODE = True
-    else: invite_mode = False
-    if args.send_bye.lower() == "true":
-        SEND_BYE = True
-    else: SEND_BYE = False
+    INVITE_MODE = args.invite_mode.lower() == "true"
+    SEND_BYE = args.send_bye.lower() == "true"
 
     ME = args.username
 
-    if INVITE_MODE:
-        callee_number = args.callee_number
-    else:
-        callee_number = None
+    callee_number = args.callee_number if INVITE_MODE else None
+
+    CONN = args.connection_type.lower()
+    if CONN != 'udp' and CONN != 'tcp' and CONN != 'ws':
+        raise ValueError
+
+    PORT = "80" if CONN == "ws" else "5060"
 
     print(f"invite_mode: {args.invite_mode}")
     print(f"send_bye: {args.send_bye}")
     print(f"username: {args.username}")
     print(f"callee_number: {args.callee_number}")
-    print()
+    print(f"connection_type: {args.connection_type}")
 
-    CLIENT = SIPClient(URI, port=PORT, me=ME)
+    CLIENT = SIPClient(URI, port=PORT, me=ME, connection_type=CONN)
     asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
+
