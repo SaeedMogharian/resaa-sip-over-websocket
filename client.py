@@ -4,6 +4,7 @@ from random import choices, randint
 from string import ascii_letters, digits
 from re import findall, search, DOTALL
 import socket
+import argparse
 
 
 def get_local_ip():
@@ -30,11 +31,6 @@ def generate_call_id():
 def generate_branch():
     """Generate a unique branch parameter for the Via header."""
     return "z9hG4bK" + ''.join(choices(ascii_letters + digits, k=10))
-
-
-def generate_tag():
-    """Generate a random tag for the From/To headers."""
-    return ''.join(choices(ascii_letters + digits, k=10))
 
 
 def generate_cseq():
@@ -94,10 +90,15 @@ class SIPClient:
 
         self.call_id = generate_call_id()
         self.branch = generate_branch()
-        self.tag = generate_tag()
+        self.tag = ''.join(choices(ascii_letters + digits, k=10))
 
         self.local_ip = get_local_ip()  # Get the local IP address
         self.local_port = None  # Set the local port (could be dynamically assigned)
+
+    def get_address(self):
+        if self.local_port is None:
+            return f"{self.local_ip}"
+        return f"{self.local_ip}:{self.local_port}"
 
     async def create_socket(self):
         """Establish connection based on the connection type."""
@@ -133,11 +134,6 @@ class SIPClient:
             print("No response received within the timeout period.")
             return None
 
-    def get_address(self):
-        if self.local_port is None:
-            return f"{self.local_ip}"
-        return f"{self.local_ip}:{self.local_port}"
-
     async def register(self):
         cseq = generate_cseq()
 
@@ -146,7 +142,7 @@ class SIPClient:
             f'REGISTER {SIPHeaders.sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
             f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
-            f'{from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
             f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me))}'
             f'{SIPHeaders.call_id_header(self.call_id)}'
             f'{SIPHeaders.cseq_header(cseq, "REGISTER")}'
@@ -186,22 +182,6 @@ class SIPClient:
         )
         await self.send_message(sip_invite)
 
-    @staticmethod
-    def extract_via_headers(response):
-        """Extract all Via headers from the INVITE response."""
-        regex = r"(Via:.*?)(?:\r\n|\n)"
-        via_headers = findall(regex, response)
-        print(f"Extracted Via headers: {via_headers}")
-        return via_headers
-
-    @staticmethod
-    def extract_cseq(response):
-        """Extract CSeq from response."""
-        regex = r"CSeq: (\d+)"
-        cs = findall(regex, response)[0]
-        print(f"Extracted Via headers: {cs}")
-        return cs
-
     async def send_ringing(self, response, caller):
         """Send 180 Ringing response."""
         route = self.extract_record_route(response)
@@ -228,19 +208,6 @@ class SIPClient:
             "Content-Length: 0\r\n\r\n"
         )
         await self.send_message(sip_ringing)
-
-    @staticmethod
-    def extract_sdp(response):
-        """Extract the SDP body from the INVITE response."""
-        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
-        sdp_match = search(sdp_regex, response, DOTALL)
-        if sdp_match:
-            sdp_body = sdp_match.group(0)
-            print(f"Extracted SDP:\n{sdp_body}")
-            return sdp_body
-        else:
-            print("No SDP found in the INVITE.")
-            return None
 
     @staticmethod
     def generate_sdp_response(sdp_body):
@@ -391,6 +358,36 @@ class SIPClient:
         )
         await self.send_message(sip_200_ok_bye)
 
+    # Extract From SIP Message
+    @staticmethod
+    def extract_sdp(response):
+        """Extract the SDP body from the INVITE response."""
+        sdp_regex = r"v=0\r\n(.*?)(?:\r\n|\r\n\r\n)"  # Matches from 'v=0' to the end of SDP
+        sdp_match = search(sdp_regex, response, DOTALL)
+        if sdp_match:
+            sdp_body = sdp_match.group(0)
+            print(f"Extracted SDP:\n{sdp_body}")
+            return sdp_body
+        else:
+            print("No SDP found in the INVITE.")
+            return None
+
+    @staticmethod
+    def extract_via_headers(response):
+        """Extract all Via headers from the INVITE response."""
+        regex = r"(Via:.*?)(?:\r\n|\n)"
+        via_headers = findall(regex, response)
+        print(f"Extracted Via headers: {via_headers}")
+        return via_headers
+
+    @staticmethod
+    def extract_cseq(response):
+        """Extract CSeq from response."""
+        regex = r"CSeq: (\d+)"
+        cs = findall(regex, response)[0]
+        print(f"Extracted Via headers: {cs}")
+        return cs
+
     @staticmethod
     def extract_request_line(response):
         regex = r"sip:(.*?) SIP/2.0"
@@ -521,7 +518,7 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
                 isCall = False
 
 
-import argparse
+
 
 if __name__ == "__main__":
     URI = "192.168.21.45"  # Kamailio URI
