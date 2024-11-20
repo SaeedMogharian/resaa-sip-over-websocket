@@ -5,6 +5,7 @@ from string import ascii_letters, digits
 from re import findall, search, DOTALL
 import socket
 import argparse
+import sys
 
 
 def get_local_ip():
@@ -471,49 +472,54 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
     if "200 OK" not in response:
         return
 
-    isCall = True
-    if invite_mode:
-        await client.invite_call(callee)
-        while isCall:
-            response = await client.receive_message()
-            if response and "200 OK" in response and "Contact" in response:
-                await client.send_ack(response, callee)
-                print("Call is Connected")
-                await asyncio.sleep(3)  # call time
-                if send_bye:
-                    await client.send_bye(response, callee)
-                    await asyncio.sleep(3)
+    saved_response = None
+    try:
+        isCall = True
+        if invite_mode:
+            await client.invite_call(callee)
+            while isCall:
+                response = await client.receive_message()
+                if response and "200 OK" in response and "Contact" in response:
+                    await client.send_ack(response, callee)
+                    saved_response = response
+                    print("Call is Connected")
+                    await asyncio.sleep(3)  # call time
+                    if send_bye:
+                        await client.send_bye(response, callee)
+                        await asyncio.sleep(1)
+                        print("Call is Finished")
+                        isCall = False
+                elif response and "BYE sip:" in response:
+                    await client.handle_bye(response, callee)
                     print("Call is Finished")
                     isCall = False
-            elif response and "BYE sip:" in response:
-                await client.handle_bye(response, callee)
-                print("Call is Finished")
-                isCall = False
-    else:
-        r_invite = None
-        while isCall:
-            response = await client.receive_message()
-            caller = True
-            if response and "INVITE sip:" in response:
-                r_invite = response
-                print("Received INVITE, sending RINGING and 200 OK")
-                caller = client.extract_caller(response)
-                client.call_id = client.extract_call_id(response)
-                await client.send_ringing(response, caller)
-                await client.send_200ok(response, caller)
-            elif response and "ACK sip:" in response:
-                print("Call is Connected")
-                await asyncio.sleep(3)  # call time
-                if send_bye:
-                    await client.send_bye(r_invite, callee)
-                    await asyncio.sleep(3)
-                    print("Call is Finished")
+        else:
+            while isCall:
+                response = await client.receive_message()
+                caller = True
+                if response and "INVITE sip:" in response:
+                    saved_response = response
+                    print("Received INVITE, sending RINGING and 200 OK")
+                    caller = client.extract_caller(response)
+                    client.call_id = client.extract_call_id(response)
+                    await client.send_ringing(response, caller)
+                    await client.send_200ok(response, caller)
+                elif response and "ACK sip:" in response:
+                    print("Call is Connected")
+                    await asyncio.sleep(3)  # call time
+                    if send_bye:
+                        await client.send_bye(saved_response, callee)
+                        await asyncio.sleep(1)
+                        print("Call is Finished")
+                        isCall = False
+                elif response and "BYE sip:" in response:
+                    await client.handle_bye(response, caller)
+                    print("Call is finished")
                     isCall = False
-            elif response and "BYE sip:" in response:
-                await client.handle_bye(response, caller)
-                print("Call is finished")
-                isCall = False
-
+    except KeyboardInterrupt:
+        await client.send_bye(saved_response, callee)
+        print("Exiting program.")
+        sys.exit(0)
 
 
 
@@ -550,5 +556,8 @@ if __name__ == "__main__":
     print(f"connection_type: {args.connection_type}")
 
     CLIENT = SIPClient(URI, port=PORT, me=ME, connection_type=CONN)
-    asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
+    try:
+        asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
+
+
 
