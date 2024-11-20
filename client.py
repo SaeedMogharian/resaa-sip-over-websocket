@@ -168,14 +168,14 @@ class SIPClient:
         cseq = generate_cseq()
 
         sip_invite = (
-            f"INVITE sip:{callee}@{self.uri} SIP/2.0\r\n"
-            f"Via: SIP/2.0/WS {self.local_ip};rport;branch={self.branch}\r\n"
-            "Max-Forwards: 70\r\n"
-            f'To: <sip:{callee}@{self.uri}>\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} INVITE\r\n"
-            f"Contact: <sip:{self.me}@{self.local_ip};transport=ws;ob>\r\n"
+            f'INVITE {sip_uri(self.uri, number=callee)} SIP/2.0\r\n'
+            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
+            'Max-Forwards: 70\r\n'
+            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{to_header(sip_uri(self.uri, number=callee))}'
+            f'{call_id_header(self.call_id)}'
+            f'{cseq_header(cseq, "INVITE")}'
+            f'{contact_header(sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
             f"{sdp_body}"
