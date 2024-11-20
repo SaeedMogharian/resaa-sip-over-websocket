@@ -377,10 +377,10 @@ class SIPClient:
         sip_200_ok_bye = (
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
-            f'To: <sip:{to_number}@{self.uri}>;tag={to_tag}\r\n'
-            f'From: <sip:{from_number}@{self.uri}>;tag={from_tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} BYE\r\n"
+            f'{to_header(sip_uri(self.uri, number=to_number), to_tag)}'
+            f'{from_header(sip_uri(self.uri, number=from_number), from_tag)}'
+            f'{call_id_header(self.call_id)}'
+            f'{cseq_header(cseq, "BYE")}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: 0\r\n\r\n"
 
