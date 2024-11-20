@@ -314,11 +314,11 @@ class SIPClient:
 
         sip_ack = (
             f"ACK {contact} SIP/2.0\r\n"
-            f"Via: SIP/2.0/WS {self.local_ip};branch={self.branch}\r\n"
-            f'To: <sip:{callee}@{self.uri}>;tag={to_tag}\r\n'
-            f'From: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} ACK\r\n"
+            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'{to_header(sip_uri(self.uri, number=callee), to_tag)}'
+            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{call_id_header(self.call_id)}'
+            f'{cseq_header(cseq, "ACK")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
