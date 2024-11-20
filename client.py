@@ -7,6 +7,7 @@ import socket
 import argparse
 import sys
 
+
 def get_local_ip():
     """Get the local IP address of the machine (may not be necessary for WebSocket)."""
     try:
@@ -515,7 +516,7 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
                     await client.handle_bye(response, caller)
                     print("Call is finished")
                     isCall = False
-    except:
+    except KeyboardInterrupt:
         await client.send_bye(saved_response, callee)
         print("Exiting program.")
         sys.exit(0)
