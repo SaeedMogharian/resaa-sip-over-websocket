@@ -63,8 +63,6 @@ def cseq_header(sequence, method) -> str:
 def call_id_header(call_id) -> str:
     return f"Call-ID: {call_id}\r\n"
 
-
-
 def to_header(uri, to_tag=None) -> str:
     header = f"To: <{uri}>"
     if to_tag is None:
@@ -523,41 +521,36 @@ import argparse
 
 if __name__ == "__main__":
     URI = "192.168.21.45"  # Kamailio URI
-    PORT = "80"
-    INVITE_MODE = False
-    SEND_BYE = True
 
     parser = argparse.ArgumentParser(description="Process command-line arguments.")
-
     parser.add_argument('--username', type=str, required=False, default="1100", help='Username')
     parser.add_argument('--send_bye', type=str, required=False, default="True", help='Send Bye (True/False)')
     parser.add_argument('--invite_mode', type=str, default="False", required=False, help='Invite Mode (True/False)')
     parser.add_argument('--callee_number', type=str, required=False, default=None, help='Callee Number')
+    parser.add_argument('--connection_type', type=str, default="tcp", help="Connection type: 'tcp', 'udp' or 'ws'")
 
     args = parser.parse_args()
 
     # Convert string inputs to boolean values
-    if args.invite_mode.lower() == "true":
-        INVITE_MODE = True
-    else:
-        invite_mode = False
-    if args.send_bye.lower() == "true":
-        SEND_BYE = True
-    else:
-        SEND_BYE = False
+    INVITE_MODE = args.invite_mode.lower() == "true"
+    SEND_BYE = args.send_bye.lower() == "true"
 
     ME = args.username
 
-    if INVITE_MODE:
-        callee_number = args.callee_number
-    else:
-        callee_number = None
+    callee_number = args.callee_number if INVITE_MODE else None
+
+    CONN = args.connection_type.lower()
+    if CONN != 'udp' and CONN != 'tcp' and CONN != 'ws':
+        raise ValueError
+
+    PORT = "80" if CONN == "ws" else "5060"
 
     print(f"invite_mode: {args.invite_mode}")
     print(f"send_bye: {args.send_bye}")
     print(f"username: {args.username}")
     print(f"callee_number: {args.callee_number}")
-    print()
+    print(f"connection_type: {args.connection_type}")
 
-    CLIENT = SIPClient(URI, port=PORT, me=ME)
+    CLIENT = SIPClient(URI, port=PORT, me=ME, connection_type=CONN)
     asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
+
