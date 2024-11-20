@@ -291,10 +291,10 @@ class SIPClient:
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f"{routes_headers}\r\n"
-            f'To: <sip:{self.me}@{self.uri}>;tag={self.tag}\r\n'
-            f'From: <sip:{caller}@{self.uri}>;tag={from_tag}\r\n'
-            f"Call-ID: {self.call_id}\r\n"
-            f"CSeq: {cseq} INVITE\r\n"
+            f'{to_header(sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{from_header(sip_uri(self.uri, number=caller), from_tag)}'
+            f'{call_id_header(self.call_id)}'
+            f'{cseq_header(cseq, "INVITE")}'
             f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
