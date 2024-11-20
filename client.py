@@ -556,7 +556,8 @@ if __name__ == "__main__":
     print(f"connection_type: {args.connection_type}")
 
     CLIENT = SIPClient(URI, port=PORT, me=ME, connection_type=CONN)
-    asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
+    try:
+        asyncio.run(call(client=CLIENT, callee=callee_number, invite_mode=INVITE_MODE, send_bye=SEND_BYE))
 
 
 
