@@ -44,38 +44,42 @@ def generate_cseq():
 
 
 # Headers
-def sip_uri(host, number=None, port=None) -> str:
-    if port is None and number is None:
-        return f"sip:{host}"
-    elif port is None:
-        return f"sip:{number}@{host}"
-    else:
-        return f"sip:{number}@{host}:{port}"
+class SIPHeaders:
+    @staticmethod
+    def sip_uri(host, number=None, port=None) -> str:
+        if port is None and number is None:
+            return f"sip:{host}"
+        elif port is None:
+            return f"sip:{number}@{host}"
+        else:
+            return f"sip:{number}@{host}:{port}"
 
-def contact_header(uri, transport=None) -> str:
-    return f"Contact: <{uri};transport:{transport}>\r\n"
+    @staticmethod
+    def contact_header(uri, transport=None) -> str:
+        return f"Contact: <{uri};transport:{transport}>\r\n"
 
+    @staticmethod
+    def cseq_header(sequence, method) -> str:
+        return f"CSeq: {sequence} {method}\r\n"
 
-def cseq_header(sequence, method) -> str:
-    return f"CSeq: {sequence} {method}\r\n"
+    @staticmethod
+    def call_id_header(call_id) -> str:
+        return f"Call-ID: {call_id}\r\n"
 
+    @staticmethod
+    def to_header(uri, to_tag=None) -> str:
+        header = f"To: <{uri}>"
+        if to_tag is None:
+            return f"{header}\r\n"
+        return f"{header};tag={to_tag}\r\n"
 
-def call_id_header(call_id) -> str:
-    return f"Call-ID: {call_id}\r\n"
+    @staticmethod
+    def from_header(uri, from_tag) -> str:
+        return f"From: <{uri}>;tag={from_tag}\r\n"
 
-def to_header(uri, to_tag=None) -> str:
-    header = f"To: <{uri}>"
-    if to_tag is None:
-        return f"{header}\r\n"
-    return f"{header};tag={to_tag}\r\n"
-
-
-def from_header(uri, from_tag) -> str:
-    return f"From: <{uri}>;tag={from_tag}\r\n"
-
-
-def via_header(address, branch, protocol) -> str:
-    return f'Via: SIP/2.0/{protocol.upper()} {address};rport;branch={branch}\r\n'
+    @staticmethod
+    def via_header(address, branch, protocol) -> str:
+        return f'Via: SIP/2.0/{protocol.upper()} {address};rport;branch={branch}\r\n'
 
 
 class SIPClient:
@@ -139,14 +143,14 @@ class SIPClient:
 
         """Send SIP REGISTER message over WebSocket."""
         sip_register = (
-            f'REGISTER {sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
-            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'REGISTER {SIPHeaders.sip_uri(self.uri)};transport:{self.connection_type} SIP/2.0\r\n'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
-            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{to_header(sip_uri(self.uri, number=self.me))}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "REGISTER")}'
-            f'{contact_header(sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
+            f'{from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me))}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "REGISTER")}'
+            f'{SIPHeaders.contact_header(SIPHeaders.sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             'Expires: 3600\r\n'
             'Content-Length: 0\r\n\r\n'
         )
@@ -168,14 +172,14 @@ class SIPClient:
         cseq = generate_cseq()
 
         sip_invite = (
-            f'INVITE {sip_uri(self.uri, number=callee)} SIP/2.0\r\n'
-            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'INVITE {SIPHeaders.sip_uri(self.uri, number=callee)} SIP/2.0\r\n'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
             'Max-Forwards: 70\r\n'
-            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{to_header(sip_uri(self.uri, number=callee))}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "INVITE")}'
-            f'{contact_header(sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=callee))}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
+            f'{SIPHeaders.contact_header(SIPHeaders.sip_uri(self.local_ip, self.me, self.local_port), self.connection_type)}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
             f"{sdp_body}"
@@ -216,10 +220,10 @@ class SIPClient:
             f"SIP/2.0 180 Ringing\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f"{routes_headers}\r\n"
-            f'{to_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{from_header(sip_uri(self.uri, number=caller), from_tag)}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "INVITE")}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=caller), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
             f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -291,10 +295,10 @@ class SIPClient:
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
             f"{routes_headers}\r\n"
-            f'{to_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{from_header(sip_uri(self.uri, number=caller), from_tag)}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "INVITE")}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=caller), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "INVITE")}'
             f"Contact: <sip:{req_line};ob> \r\n"
             "Content-Type: application/sdp\r\n"
             f"Content-Length: {content_length}\r\n\r\n"
@@ -314,11 +318,11 @@ class SIPClient:
 
         sip_ack = (
             f"ACK {contact} SIP/2.0\r\n"
-            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
-            f'{to_header(sip_uri(self.uri, number=callee), to_tag)}'
-            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "ACK")}'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=callee), to_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "ACK")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -346,11 +350,11 @@ class SIPClient:
         """Send SIP BYE message."""
         sip_bye = (
             f"BYE {contact} SIP/2.0\r\n"
-            f'{via_header(self.get_address(), self.branch, self.connection_type)}'
-            f'{to_header(sip_uri(self.uri, number=other), other_tag)}'
-            f'{from_header(sip_uri(self.uri, number=self.me), self.tag)}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "BYE")}'
+            f'{SIPHeaders.via_header(self.get_address(), self.branch, self.connection_type)}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=other), other_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=self.me), self.tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "BYE")}'
             f"{routes_headers}\r\n"
             "Content-Length: 0\r\n\r\n"
         )
@@ -377,10 +381,10 @@ class SIPClient:
         sip_200_ok_bye = (
             f"SIP/2.0 200 OK\r\n"
             f"{via_headers_str}\r\n"  # Include all Via headers
-            f'{to_header(sip_uri(self.uri, number=to_number), to_tag)}'
-            f'{from_header(sip_uri(self.uri, number=from_number), from_tag)}'
-            f'{call_id_header(self.call_id)}'
-            f'{cseq_header(cseq, "BYE")}'
+            f'{SIPHeaders.to_header(SIPHeaders.sip_uri(self.uri, number=to_number), to_tag)}'
+            f'{SIPHeaders.from_header(SIPHeaders.sip_uri(self.uri, number=from_number), from_tag)}'
+            f'{SIPHeaders.call_id_header(self.call_id)}'
+            f'{SIPHeaders.cseq_header(cseq, "BYE")}'
             "Content-Type: application/sdp\r\n"
             f"Content-Length: 0\r\n\r\n"
 
