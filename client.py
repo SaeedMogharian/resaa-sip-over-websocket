@@ -22,21 +22,13 @@ def get_local_ip():
 
     return local_ip
 
-
-def generate_call_id():
-    """Generate a random Call-ID for the SIP session."""
-    return ''.join(choices(ascii_letters + digits, k=20))
-
-
 def generate_branch():
     """Generate a unique branch parameter for the Via header."""
     return "z9hG4bK" + ''.join(choices(ascii_letters + digits, k=10))
 
-
 def generate_cseq():
     """Generate a random tag for the From/To headers."""
     return str(randint(1, 9999))
-
 
 
 # Headers
@@ -88,7 +80,7 @@ class SIPClient:
         self.websocket = None
         self.socket = None
 
-        self.call_id = generate_call_id()
+        self.call_id = None
         self.branch = generate_branch()
         self.tag = ''.join(choices(ascii_letters + digits, k=10))
 
@@ -99,6 +91,10 @@ class SIPClient:
         if self.local_port is None:
             return f"{self.local_ip}"
         return f"{self.local_ip}:{self.local_port}"
+
+    def generate_call_id(self):
+        """Generate a random Call-ID for the SIP session."""
+        self.call_id = ''.join(choices(ascii_letters + digits, k=20))
 
     async def create_socket(self):
         """Establish connection based on the connection type."""
@@ -468,6 +464,7 @@ class SIPClient:
 
 async def call(client: SIPClient, callee, invite_mode, send_bye):
     await client.create_socket()
+    client.generate_call_id()
     await client.register()
     await asyncio.sleep(1)  # Adding sleep for server response time
     response = await client.receive_message()
@@ -521,7 +518,7 @@ async def call(client: SIPClient, callee, invite_mode, send_bye):
 
 
 if __name__ == "__main__":
-    URI = "192.168.21.45"  # Kamailio URI
+    URI = "192.168.21.45"  # Kamailio PCSCF URI
 
     parser = argparse.ArgumentParser(description="Process command-line arguments.")
     parser.add_argument('--username', type=str, required=False, default="1100", help='Username')
