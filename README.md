@@ -33,9 +33,9 @@
 ### مثال استفاده
 
 برای اجرای کلاینت SIP، می‌توانید از مثال‌های زیر استفاده کنید: (در این حالت برنامه با شماره 1200 رجیستر می‌کند و به 1001 زنگ میزند)
-`python3 client.py --send_bye True --username 1200 --invite_mode True --callee_number 1001 --connction_type ws`
+`python3 sip_client.py --send_bye True --username 1200 --invite_mode True --callee_number 1001 --connection_type ws`
 یا اجرای ساده با مقادیر پیش‌فرض:
-`python3 client.py`
+`python3 sip_client.py`
 
 
 ### کارهای آینده
